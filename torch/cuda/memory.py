@@ -78,6 +78,13 @@ if not hasattr(torch._C, "_MemPool"):
     torch._C.__dict__["_cuda_beginAllocateCurrentThreadToPool"] = _dummy_type(
         "_cuda_beginAllocateCurrentThreadToPool"
     )
+    torch._C.__dict__["_cuda_beginUvmAllocate"] = _dummy_type(
+        "_cuda_beginUvmAllocate"
+    )
+
+    torch._C.__dict__["_cuda_endUvmAllocate"] = _dummy_type(
+        "_cuda_endUvmAllocate"
+    )
     torch._C.__dict__["_cuda_endAllocateToPool"] = _dummy_type(
         "_cuda_endAllocateToPool"
     )

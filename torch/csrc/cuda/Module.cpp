@@ -1417,6 +1417,19 @@ static void registerCudaPluggableAllocator(PyObject* module) {
       });
 
   m.def(
+      "_cuda_beginUvmAllocate",
+      []() {
+        c10::cuda::CUDACachingAllocator::allocator.store(c10::cuda::CUDACachingAllocator::allocator_uvm.load());
+      });
+     
+      
+  m.def(
+      "_cuda_endUvmAllocate",
+      []() {
+        c10::cuda::CUDACachingAllocator::allocator.store(c10::cuda::CUDACachingAllocator::allocator_cuda.load());
+      });
+
+  m.def(
       "_cuda_releasePool",
       [](c10::DeviceIndex device, at::cuda::MempoolId_t mempool_id) {
         c10::cuda::CUDACachingAllocator::releasePool(device, mempool_id);

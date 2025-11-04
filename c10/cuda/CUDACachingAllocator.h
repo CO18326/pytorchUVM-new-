@@ -352,9 +352,15 @@ class CUDAAllocator : public DeviceAllocator {
 // (atomic stores are different), so reading this value
 // is no different than loading a pointer.
 C10_CUDA_API extern std::atomic<CUDAAllocator*> allocator;
+C10_CUDA_API extern std::atomic<CUDAAllocator*> allocator_uvm;
+C10_CUDA_API extern std::atomic<CUDAAllocator*> allocator_cuda;
 
 inline CUDAAllocator* get() {
   return allocator.load();
+}
+
+inline CUDAAllocator* get_uvm() {
+  return allocator_uvm.load();
 }
 
 // Called directly by clients.
@@ -371,7 +377,10 @@ inline void raw_delete(void* ptr) {
 }
 
 inline void init(int device_count) {
+  //get()->init(device_count);
   get()->init(device_count);
+  allocator_cuda.load()->init(device_count);
+  return  get_uvm()->init(device_count);
 }
 
 inline double getMemoryFraction(c10::DeviceIndex device) {

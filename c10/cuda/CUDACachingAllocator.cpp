@@ -1018,26 +1018,26 @@ struct MempoolIdHash {
   }
 };
 
-cudaError_t allocPrimitive(void** ptr, size_t size, AllocParams& p) {
+cudaError_t allocPrimitive(void** ptr, size_t size, AllocParams& p,bool is_uvm=false) {
   if (p.pool->owner_PrivatePool && p.pool->owner_PrivatePool->allocator()) {
     *ptr = p.pool->owner_PrivatePool->allocator()->raw_alloc(size);
     return *ptr ? cudaSuccess : cudaErrorMemoryAllocation;
   } else {
-    return C10_CUDA_ERROR_HANDLED(cudaMalloc(ptr, size));
+    return is_uvm ? C10_CUDA_ERROR_HANDLED(cudaMallocManaged(ptr, size)) : C10_CUDA_ERROR_HANDLED(cudaMalloc(ptr, size));
   }
 }
 
-cudaError_t cudaMallocMaybeCapturing(void** ptr, size_t size, AllocParams& p) {
+cudaError_t cudaMallocMaybeCapturing(void** ptr, size_t size, AllocParams& p,bool is_uvm=false) {
   if (at::cuda::currentStreamCaptureStatusMayInitCtx() ==
       at::cuda::CaptureStatus::None) {
-    return allocPrimitive(ptr, size, p);
+    return allocPrimitive(ptr, size, p,is_uvm);
   } else {
     // It's ok to capture cudaMallocs, as long as we never cudaFree those
     // addresses before replay.
     // Capturing cudaMalloc behaves nicely: it gives the graph new VA,
     // but is ignored (won't leakily allocate new memory) in replays.
     at::cuda::CUDAStreamCaptureModeGuard g{cudaStreamCaptureModeRelaxed};
-    return allocPrimitive(ptr, size, p);
+    return allocPrimitive(ptr, size, p,is_uvm);
   }
 }
 
@@ -1357,7 +1357,7 @@ class DeviceCachingAllocator {
   // All public methods (except the above) acquire the allocator mutex.
   // Thus, do not call a public method from another public method.
 
-  Block* malloc(size_t orig_size, cudaStream_t stream) {
+  Block* malloc(size_t orig_size, cudaStream_t stream,bool is_uvm=false) {
     // done outside the lock because we don't know what locks the recorder needs
     // to have...
     auto context = maybeGatherContext(RecordContext::STATE);
@@ -1409,15 +1409,15 @@ class DeviceCachingAllocator {
       // cudaMalloc. So far this function has not modified allocator state, but
       // keep in mind that any observed allocator state may change across calls
       // to alloc_block since it may release the lock.
-      block_found = alloc_block(params, false, context, lock)
+      block_found = alloc_block(params, false, context, lock,is_uvm)
           // Free enough available cached blocks to satisfy alloc and retry
           // alloc.
           || (release_available_cached_blocks(params, context) &&
-              alloc_block(params, false, context, lock))
+              alloc_block(params, false, context, lock,is_uvm))
           // Free all non-split cached blocks and retry alloc.
           || (C10_LIKELY(captures_underway.empty()) &&
               release_cached_blocks(context, {0, 0}) &&
-              alloc_block(params, true, context, lock));
+              alloc_block(params, true, context, lock,is_uvm));
     }
 
     // we are about to oom, try to use existing mempools as a last resort
@@ -3143,7 +3143,8 @@ class DeviceCachingAllocator {
       AllocParams& p,
       bool isRetry,
       const std::shared_ptr<GatheredContext>& ctx,
-      std::unique_lock<std::recursive_mutex>& lock) {
+      std::unique_lock<std::recursive_mutex>& lock,
+      bool is_uvm=false) {
     // Defensively checks for preexisting CUDA error state.
     C10_CUDA_CHECK(cudaGetLastError());
 
@@ -3190,9 +3191,9 @@ class DeviceCachingAllocator {
         // any potential exceptions in the cudaMallocMaybeCapturing function.
         auto sg = c10::make_scope_exit([&]() { lock.lock(); });
         lock.unlock();
-        p.err = cudaMallocMaybeCapturing(&ptr, size, p);
+        p.err = cudaMallocMaybeCapturing(&ptr, size, p,is_uvm);
       } else {
-        p.err = cudaMallocMaybeCapturing(&ptr, size, p);
+        p.err = cudaMallocMaybeCapturing(&ptr, size, p,is_uvm);
       }
       if (CUDAAllocatorConfig::release_lock_on_cudamalloc()) {
         TORCH_CHECK(
@@ -3724,7 +3725,7 @@ static void* uncached_allocate(size_t size) {
   void* devPtr = nullptr;
   // Deliberately don't use cudaMallocMaybeCapturing here, to force an error
   // if someone tries to use forceUncachedAllocator while capturing.
-  C10_CUDA_CHECK(cudaMalloc(&devPtr, size));
+  C10_CUDA_CHECK(cudaMallocManaged(&devPtr, size));
   const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
   if (C10_UNLIKELY(interp)) {
     (*interp)->trace_gpu_memory_allocation(
@@ -3785,6 +3786,11 @@ class NativeCachingAllocator : public CUDAAllocator {
   RingBuffer<AnnotationEntry> annotation_buffer;
 
  public:
+  bool _is_uvm;
+  NativeCachingAllocator(bool is_uvm=false){
+
+    _is_uvm=is_uvm;
+  }
   std::vector<std::unique_ptr<DeviceCachingAllocator>> device_allocator;
 
   Block* get_allocated_block(void* ptr, bool remove = false) {
@@ -3827,7 +3833,8 @@ class NativeCachingAllocator : public CUDAAllocator {
         "Allocator not initialized for device ",
         device,
         ": did you call init?");
-    Block* block = device_allocator[device]->malloc(size, stream);
+    //Block* block = device_allocator[device]->malloc(size, stream);
+    Block* block = device_allocator[device]->malloc(size, stream,_is_uvm);
     add_allocated_block(block);
     *devPtr = block->ptr;
     const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
@@ -3843,7 +3850,8 @@ class NativeCachingAllocator : public CUDAAllocator {
     }
     Block* block = get_allocated_block(ptr, true /* remove */);
     if (!block) {
-      TORCH_CHECK(false, "invalid device pointer: ", ptr);
+      //TORCH_CHECK(false, "invalid device pointer: ", ptr);
+      return;
     }
     const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
     if (C10_UNLIKELY(interp)) {
@@ -4426,6 +4434,7 @@ class NativeCachingAllocator : public CUDAAllocator {
 };
 
 static NativeCachingAllocator allocator;
+static NativeCachingAllocator uvm_allocator(true);
 
 void local_raw_delete(void* ptr) {
   if (TORCH_SDT_IS_ENABLED(free)) {
@@ -4433,6 +4442,7 @@ void local_raw_delete(void* ptr) {
   }
 
   allocator.free(ptr);
+  uvm_allocator.free(ptr);
 }
 
 } // namespace Native
@@ -4505,11 +4515,16 @@ struct BackendStaticInitializer {
 #define HIP_MASQUERADING_AS_CUDA "cuda"
     at::SetAllocator(c10::Device(HIP_MASQUERADING_AS_CUDA).type(), r, 0);
     allocator.store(r);
+    allocator_cuda.store(allocator.load());
+    allocator_uvm.store(&Native::uvm_allocator);
 #undef HIP_MASQUERADING_AS_CUDA
   }
 };
 
 std::atomic<CUDAAllocator*> allocator;
+std::atomic<CUDAAllocator*> allocator_uvm;
+std::atomic<CUDAAllocator*> allocator_cuda;
+
 static BackendStaticInitializer backend_static_initializer;
 } // namespace cuda::CUDACachingAllocator
 } // namespace c10
