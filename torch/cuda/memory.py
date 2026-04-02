@@ -230,6 +230,12 @@ def empty_cache() -> None:
     if is_initialized():
         torch._C._cuda_emptyCache()
 
+def enable_prefetch() -> None:
+    torch._C._accelerator_enablePrefetch()
+
+def disable_prefetch() -> None:
+    torch._C._accelerator_disablePrefetch()
+
 
 def memory_stats(device: "Device" = None) -> dict[str, Any]:
     r"""Return a dictionary of CUDA memory allocator statistics for a given device.

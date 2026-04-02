@@ -1,5 +1,8 @@
 #include <c10/cuda/CUDACachingAllocator.h>
-
+#include <fstream>
+#include <iostream>
+#include <time.h>
+#include <stdint.h>
 #include <c10/core/impl/GPUTrace.h>
 #include <c10/cuda/CUDAAllocatorConfig.h>
 #include <c10/cuda/CUDAException.h>
@@ -1567,7 +1570,17 @@ class DeviceCachingAllocator {
           " fragmentation.  See documentation for Memory Management "
           " (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)");
     }
-
+   /*cudaMemLocation location;
+   location.type=cudaMemLocationTypeDevice;
+  struct cudaPointerAttributes attributes;
+  cudaPointerGetAttributes(&attributes, params.block->ptr);
+  //cudaStream_t stream1;
+  //cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking);
+   // cudaStreamSynchronize(stream);
+   if(attributes.type == cudaMemoryTypeManaged){
+       location.id=0;
+    cudaMemPrefetchAsync(params.block->ptr, params.block->size,location,0);
+   }*/
     bool split_remainder = should_split(params.block, params.size());
     return alloc_found_block(
         params, orig_size, std::move(context), split_remainder);
@@ -1594,6 +1607,11 @@ class DeviceCachingAllocator {
       remaining = block;
 
       block = new Block(device, stream, size, pool, block->ptr);
+      
+      
+      
+      
+      
       block->expandable_segment_ = remaining->expandable_segment_;
       block->prev = remaining->prev;
       if (block->prev) {
@@ -1628,7 +1646,24 @@ class DeviceCachingAllocator {
         stats.inactive_split[stat_type].decrease(1);
       });
     }
-
+    /*
+    cudaMemLocation location;
+   location.type=cudaMemLocationTypeDevice;
+  struct cudaPointerAttributes attributes;
+  cudaPointerGetAttributes(&attributes, block->ptr);
+  //cudaStream_t stream1;
+  //cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking);
+   // cudaStreamSynchronize(stream);
+   
+   
+   if(attributes.type == cudaMemoryTypeManaged){
+       location.id=0;
+    cudaMemPrefetchAsync(block->ptr, (block->size),location,0);
+    
+    
+    
+    //cudaMemPrefetchAsync(block->ptr, block->size,location,0);
+   }*/
     block->allocated = true;
     block->requested_size = orig_size;
 
@@ -3062,7 +3097,25 @@ class DeviceCachingAllocator {
          p.size() + AcceleratorAllocatorConfig::max_non_split_rounding_size()))
       return false;
     p.block = *it;
-    pool.blocks.erase(it);
+   pool.blocks.erase(it); 
+    /*cudaMemLocation location;
+   location.type=cudaMemLocationTypeDevice;
+  struct cudaPointerAttributes attributes;
+  cudaPointerGetAttributes(&attributes, p.block->ptr);
+  //cudaStream_t stream1;
+  //cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking);
+   // cudaStreamSynchronize(stream);
+   
+   
+   if(attributes.type == cudaMemoryTypeManaged){
+       location.id=0;
+    cudaMemPrefetchAsync(p.block->ptr, p.block->size,location,0);
+    
+    
+    
+    //cudaMemPrefetchAsync(block->ptr, block->size,location,0);
+   }*/
+   
     return true;
   }
 
@@ -3787,6 +3840,7 @@ class NativeCachingAllocator : public CUDAAllocator {
 
  public:
   bool _is_uvm;
+  bool prefetch_enabled;
   NativeCachingAllocator(bool is_uvm=false){
 
     _is_uvm=is_uvm;
@@ -3807,6 +3861,11 @@ class NativeCachingAllocator : public CUDAAllocator {
     return block;
   }
 
+  void prefetch_enable(bool value) override{
+    std::cout << "Prefetch enabled..."<< value << std::endl;
+    this->prefetch_enabled=value;
+  }
+
   void init(int device_count) override {
     const auto size = static_cast<int64_t>(device_allocator.size());
     if (size < device_count) {
@@ -3821,6 +3880,39 @@ class NativeCachingAllocator : public CUDAAllocator {
   bool initialized() override {
     return !device_allocator.empty();
   }
+
+  inline uint64_t get_time_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);  // same as Python time.time_ns()
+    return (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+  }
+
+  void log_to_csv(const char* filename, void* addr, size_t size) {
+    std::ofstream file(filename, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Error opening file\n";
+        return;
+    }
+
+    uint64_t timestamp = get_time_ns();
+
+    file << timestamp << "," << addr << ","<< size << "\n";
+}
+
+
+void log_to_csv_free(const char* filename, void* addr, size_t size) {
+    std::ofstream file(filename, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Error opening file\n";
+        return;
+    }
+
+    uint64_t timestamp = get_time_ns();
+
+    file << timestamp << "," << addr << "," << size <<"\n";
+}
 
   /** allocates a block which is safe to use from the provided stream */
   void malloc(
@@ -3837,6 +3929,20 @@ class NativeCachingAllocator : public CUDAAllocator {
     Block* block = device_allocator[device]->malloc(size, stream,_is_uvm);
     add_allocated_block(block);
     *devPtr = block->ptr;
+    //cudaMemLocation location;
+   //location.type=cudaMemLocationTypeDevice;
+  //struct cudaPointerAttributes attributes;
+  //cudaPointerGetAttributes(&attributes, *devPtr);
+  //cudaStream_t stream1;
+  //cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking);
+   // cudaStreamSynchronize(stream);
+   /*if(attributes.type == cudaMemoryTypeManaged){
+       location.id=0;
+    cudaMemPrefetchAsync(*devPtr, block->size,location,0);
+   }*/
+   
+   log_to_csv("allocation.csv",*devPtr,block->size);
+    
     const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
     if (C10_UNLIKELY(interp)) {
       (*interp)->trace_gpu_memory_allocation(
@@ -3848,11 +3954,30 @@ class NativeCachingAllocator : public CUDAAllocator {
     if (!ptr) {
       return;
     }
+    //static int i=0;
     Block* block = get_allocated_block(ptr, true /* remove */);
+    cudaMemLocation location;
+   location.type=cudaMemLocationTypeDevice ;
+    
+   // cudaStream_t stream1;
+    struct cudaPointerAttributes attributes;
+  cudaPointerGetAttributes(&attributes, ptr);
+ // cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking);
+   // cudaStreamSynchronize(stream);*/
+  
+    
+    
     if (!block) {
       //TORCH_CHECK(false, "invalid device pointer: ", ptr);
       return;
     }
+    
+    if((attributes.type == cudaMemoryTypeManaged) && this->prefetch_enabled){
+      location.id=0;
+       //std::cout << "Prefetch..." << std::endl;
+    cudaMemPrefetchAsync(ptr, block->size,location,0);
+   }
+   log_to_csv_free("free.csv",block->ptr,block->size);
     const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
     if (C10_UNLIKELY(interp)) {
       (*interp)->trace_gpu_memory_deallocation(

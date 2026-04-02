@@ -668,6 +668,17 @@ std::tuple<Tensor, Tensor> native_multi_head_attention_cuda(
         (backend == sdp::SDPBackend::flash_attention || backend == sdp::SDPBackend::efficient_attention ||
          backend == sdp::SDPBackend::cudnn_attention)) {
       auto x = at::linear(query, qkv_weight, qkv_bias);
+     // cudaMemLocation location;
+   //location.type=cudaMemLocationTypeDevice;
+  //struct cudaPointerAttributes attributes;
+  //cudaPointerGetAttributes(&attributes, p.block->ptr);
+  //cudaStream_t stream1;
+  //cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking);
+   // cudaStreamSynchronize(stream);
+   //if(attributes.type == cudaMemoryTypeManaged){
+       // std::cout<<"new path";
+      // location.id=0;
+    //cudaMemPrefetchAsync(x.data_ptr(),x.numel() * x.element_size(),location,0);
       auto chunks = x.chunk(3, -1);
       auto x_size_0 = x.size(0);
 
@@ -677,6 +688,7 @@ std::tuple<Tensor, Tensor> native_multi_head_attention_cuda(
                       .transpose(1, 2);
       chunks[2] = (chunks[2].view({x_size_0, -1, num_head, dim_per_head}))
                       .transpose(1, 2);
+      
       auto y = at::scaled_dot_product_attention(
           chunks[0], chunks[1], chunks[2], mask, 0.0, false, std::nullopt);
 

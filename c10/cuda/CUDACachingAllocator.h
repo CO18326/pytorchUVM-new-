@@ -225,6 +225,16 @@ class CUDAAllocator : public DeviceAllocator {
   virtual std::vector<StreamSegmentSize> getExpandableSegmentSizes(
       c10::DeviceIndex device) = 0;
   virtual void enable(bool value) = 0;
+  virtual void prefetch_enable(bool value)=0;
+
+  void enable_prefetch() override {
+    prefetch_enable(true);
+  }
+
+  void disable_prefetch() override{
+    prefetch_enable(false);
+  }
+  
   virtual bool isEnabled() const = 0;
   virtual void cacheInfo(c10::DeviceIndex device, size_t* largestBlock) = 0;
   virtual void* getBaseAllocation(void* ptr, size_t* size) = 0;
@@ -398,6 +408,14 @@ inline std::vector<StreamSegmentSize> getExpandableSegmentSizes(
 
 inline void emptyCache(MempoolId_t mempool_id = {0, 0}) {
   get()->emptyCache(mempool_id);
+}
+
+inline void enable_prefetch_temp(){
+  get()->prefetch_enable(true);
+}
+
+inline void disable_prefetch_temp(){
+  get()->prefetch_enable(false);
 }
 
 inline void enable(bool value) {

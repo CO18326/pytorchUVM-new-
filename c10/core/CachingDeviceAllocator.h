@@ -81,6 +81,10 @@ struct C10_API DeviceAllocator : public c10::Allocator {
   // the system
   virtual void emptyCache(MempoolId_t mempool_id = {0, 0}) = 0;
 
+  virtual void enable_prefetch() = 0;
+
+  virtual void disable_prefetch() = 0;
+
   // Associates a memory allocation with a stream to establish dependency
   // tracking. Prevents memory reuse until all operations on the specified
   // stream complete

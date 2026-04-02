@@ -422,6 +422,15 @@ struct CudaMallocAsyncAllocator : public CUDAAllocator {
     return &local_raw_delete;
   }
 
+
+  void prefetch_enable(bool value){
+
+  }
+
+  void prefetch_disable(bool value){
+    
+  }
+
   // This function should not issue any context-creating calls,
   // just set up for later calls to init per-device pools based
   // on the current device each later call sees.

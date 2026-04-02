@@ -59,6 +59,13 @@ struct TORCH_CUDA_CPP_API CUDAPluggableAllocator
 
   void set_memory_fraction_fn(
       std::function<void(double, int)> memory_fraction_fn);
+  void prefetch_enable(bool value){
+
+  }
+
+  void prefetch_disable(bool value){
+    
+  }
 
   void set_base_alloc_fn(std::function<void*(void*, size_t*)> base_alloc_fn);
 

@@ -80,6 +80,8 @@ void initModule(PyObject* module) {
   });
 
   m.def("_accelerator_emptyCache", []() { at::accelerator::emptyCache(); });
+  m.def("_accelerator_enablePrefetch", []() { at::accelerator::enable_prefetch(); });
+  m.def("_accelerator_disablePrefetch", []() { at::accelerator::disable_prefetch(); });
 
   m.def("_accelerator_getDeviceStats", [](c10::DeviceIndex device_index) {
     using c10::CachingAllocator::Stat;

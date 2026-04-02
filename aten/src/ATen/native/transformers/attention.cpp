@@ -531,6 +531,7 @@ inline void validate_sdpa_input(
       "Scaled_dot_product_attention: Nested tensors for query / key are not supported "
       "when an explicit attn_mask is set");
   }
+  //std::cout<<"sdpa input validate";
   return;
 }
 // This function is used to produce an attn_mask
@@ -725,6 +726,8 @@ Tensor scaled_dot_product_attention(
     std::optional<double> scale,
     bool enable_gqa) {
   using sdp::SDPBackend;
+  
+   //}
   validate_sdpa_input(query_, key, value, attn_mask_, dropout_p, is_causal, scale);
   int64_t choice_int = static_cast<int64_t>(sdp::SDPBackend::math);
   if (_fused_sdp_choice_stub.is_device_supported(query_.device().type())) {

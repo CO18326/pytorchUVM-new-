@@ -78,6 +78,16 @@ TORCH_API inline void emptyCache() {
   at::getDeviceAllocator(device_type)->emptyCache();
 }
 
+TORCH_API inline void enable_prefetch() {
+  const auto device_type = getAccelerator(true).value();
+  at::getDeviceAllocator(device_type)->enable_prefetch();
+}
+
+TORCH_API inline void disable_prefetch() {
+  const auto device_type = getAccelerator(true).value();
+  at::getDeviceAllocator(device_type)->disable_prefetch();
+}
+
 TORCH_API inline at::CachingDeviceAllocator::DeviceStats getDeviceStats(
     c10::DeviceIndex device_index) {
   const auto device_type = getAccelerator(true).value();
