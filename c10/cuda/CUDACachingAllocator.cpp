@@ -1263,6 +1263,7 @@ class DeviceCachingAllocator {
 
  public:
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
+  bool prefetch_enable=false;
   explicit DeviceCachingAllocator(c10::DeviceIndex id)
       : device_id(id),
         large_blocks(/*small=*/false),
@@ -1646,7 +1647,7 @@ class DeviceCachingAllocator {
         stats.inactive_split[stat_type].decrease(1);
       });
     }
-    /*
+    
     cudaMemLocation location;
    location.type=cudaMemLocationTypeDevice;
   struct cudaPointerAttributes attributes;
@@ -1656,14 +1657,14 @@ class DeviceCachingAllocator {
    // cudaStreamSynchronize(stream);
    
    
-   if(attributes.type == cudaMemoryTypeManaged){
+   if(attributes.type == cudaMemoryTypeManaged && this->prefetch_enable){
        location.id=0;
-    cudaMemPrefetchAsync(block->ptr, (block->size),location,0);
+       cudaMemPrefetchAsync(block->ptr,block->size,location,0);
     
     
     
     //cudaMemPrefetchAsync(block->ptr, block->size,location,0);
-   }*/
+   }
     block->allocated = true;
     block->requested_size = orig_size;
 
@@ -3926,7 +3927,9 @@ void log_to_csv_free(const char* filename, void* addr, size_t size) {
         device,
         ": did you call init?");
     //Block* block = device_allocator[device]->malloc(size, stream);
+    device_allocator[device]->prefetch_enable=this->prefetch_enabled;
     Block* block = device_allocator[device]->malloc(size, stream,_is_uvm);
+
     add_allocated_block(block);
     *devPtr = block->ptr;
     //cudaMemLocation location;
@@ -3941,7 +3944,7 @@ void log_to_csv_free(const char* filename, void* addr, size_t size) {
     cudaMemPrefetchAsync(*devPtr, block->size,location,0);
    }*/
    
-   log_to_csv("allocation.csv",*devPtr,block->size);
+   //log_to_csv("allocation.csv",*devPtr,block->size);
     
     const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
     if (C10_UNLIKELY(interp)) {
@@ -3956,7 +3959,7 @@ void log_to_csv_free(const char* filename, void* addr, size_t size) {
     }
     //static int i=0;
     Block* block = get_allocated_block(ptr, true /* remove */);
-    cudaMemLocation location;
+    /*cudaMemLocation location;
    location.type=cudaMemLocationTypeDevice ;
     
    // cudaStream_t stream1;
@@ -3972,12 +3975,12 @@ void log_to_csv_free(const char* filename, void* addr, size_t size) {
       return;
     }
     
-    if((attributes.type == cudaMemoryTypeManaged) && this->prefetch_enabled){
+    /*if((attributes.type == cudaMemoryTypeManaged) && this->prefetch_enabled){
       location.id=0;
        //std::cout << "Prefetch..." << std::endl;
     cudaMemPrefetchAsync(ptr, block->size,location,0);
-   }
-   log_to_csv_free("free.csv",block->ptr,block->size);
+   }*/
+   //log_to_csv_free("free.csv",block->ptr,block->size);
     const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
     if (C10_UNLIKELY(interp)) {
       (*interp)->trace_gpu_memory_deallocation(
