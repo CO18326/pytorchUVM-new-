@@ -1587,6 +1587,19 @@ class DeviceCachingAllocator {
         params, orig_size, std::move(context), split_remainder);
   }
 
+  void log_to_csv_actual(const char* filename, size_t acc_size, size_t splitted_block) {
+    std::ofstream file(filename, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Error opening file\n";
+        return;
+    }
+
+    //uint64_t timestamp = get_time_ns();
+
+    file << acc_size << ","<< splitted_block << "\n";
+}
+
   Block* alloc_found_block(
       const AllocParams& params,
       size_t orig_size,
@@ -1596,6 +1609,18 @@ class DeviceCachingAllocator {
     auto device = params.device();
     auto pool = params.pool;
     auto stream = params.stream();
+
+    /*static cudaStream_t prefetch_stream;
+    static bool initialized = false;
+
+    if (!initialized) {
+            // Create the stream (non-blocking is often preferred)
+      cudaError_t err = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
+      if (err != cudaSuccess) {
+        std::cerr << "CUDA Error: " << cudaGetErrorString(err) << std::endl;
+      }
+      initialized = true;
+    }*/
 
     TORCH_INTERNAL_ASSERT(
         params.err == cudaSuccess && params.block != nullptr &&
@@ -1659,9 +1684,14 @@ class DeviceCachingAllocator {
    
    if(attributes.type == cudaMemoryTypeManaged && this->prefetch_enable){
        location.id=0;
-       cudaMemPrefetchAsync(block->ptr,block->size,location,0);
+       size_t prefetch_size = orig_size;
+       if (prefetch_size > 75497472){
+        
+        cudaMemPrefetchAsync(block->ptr,prefetch_size,location,0);
+      
+      }
     
-    
+    //log_to_csv_actual("actual_trial.csv",orig_size,block->size);
     
     //cudaMemPrefetchAsync(block->ptr, block->size,location,0);
    }
@@ -3902,6 +3932,8 @@ class NativeCachingAllocator : public CUDAAllocator {
 }
 
 
+
+
 void log_to_csv_free(const char* filename, void* addr, size_t size) {
     std::ofstream file(filename, std::ios::app);
 
@@ -3944,7 +3976,7 @@ void log_to_csv_free(const char* filename, void* addr, size_t size) {
     cudaMemPrefetchAsync(*devPtr, block->size,location,0);
    }*/
    
-   //log_to_csv("allocation.csv",*devPtr,block->size);
+   log_to_csv("allocation.csv",*devPtr,block->size);
     
     const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
     if (C10_UNLIKELY(interp)) {
@@ -3980,7 +4012,7 @@ void log_to_csv_free(const char* filename, void* addr, size_t size) {
        //std::cout << "Prefetch..." << std::endl;
     cudaMemPrefetchAsync(ptr, block->size,location,0);
    }*/
-   //log_to_csv_free("free.csv",block->ptr,block->size);
+   log_to_csv_free("free.csv",block->ptr,block->size);
     const c10::impl::PyInterpreter* interp = c10::impl::GPUTrace::get_trace();
     if (C10_UNLIKELY(interp)) {
       (*interp)->trace_gpu_memory_deallocation(
