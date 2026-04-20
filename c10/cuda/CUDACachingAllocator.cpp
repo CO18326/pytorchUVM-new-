@@ -1587,7 +1587,14 @@ class DeviceCachingAllocator {
         params, orig_size, std::move(context), split_remainder);
   }
 
-  void log_to_csv_actual(const char* filename, size_t acc_size, size_t splitted_block) {
+  inline uint64_t get_time_ns() {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);  // same as Python time.time_ns()
+    return (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+  }
+
+  
+  void log_to_csv_actual(const char* filename, void* ptr,size_t acc_size, size_t split_reminder, size_t block_size,size_t given_size,size_t remaining,bool already_split) {
     std::ofstream file(filename, std::ios::app);
 
     if (!file.is_open()) {
@@ -1595,9 +1602,9 @@ class DeviceCachingAllocator {
         return;
     }
 
-    //uint64_t timestamp = get_time_ns();
+    uint64_t timestamp = get_time_ns();
 
-    file << acc_size << ","<< splitted_block << "\n";
+    file <<timestamp << ","<<ptr<<","<<acc_size << ","<<split_reminder << ","<<block_size << ","<<given_size << ","<< remaining <<"," <<already_split << "\n";
 }
 
   Block* alloc_found_block(
@@ -1629,6 +1636,9 @@ class DeviceCachingAllocator {
     Block* remaining = nullptr;
 
     const bool already_split = block->is_split();
+    
+    log_to_csv_actual("actual_trial.csv",block->ptr,orig_size,split_remainder,block->size,size,block->size-size,already_split);
+    
     if (split_remainder) {
       remaining = block;
 
@@ -1685,13 +1695,12 @@ class DeviceCachingAllocator {
    if(attributes.type == cudaMemoryTypeManaged && this->prefetch_enable){
        location.id=0;
        size_t prefetch_size = orig_size;
-       if (prefetch_size > 75497472){
         
         cudaMemPrefetchAsync(block->ptr,prefetch_size,location,0);
       
-      }
+      
     
-    //log_to_csv_actual("actual_trial.csv",orig_size,block->size);
+    
     
     //cudaMemPrefetchAsync(block->ptr, block->size,location,0);
    }
